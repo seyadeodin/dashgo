@@ -1,4 +1,4 @@
-import { createServer, Factory, Model } from 'miragejs';
+import { ActiveModelSerializer, createServer, Factory, Model, Response } from 'miragejs';
 import { faker } from '@faker-js/faker';
 
 type User = {
@@ -9,6 +9,11 @@ type User = {
 
 export function makeServer() {
   const server = createServer({
+    // ActiveModelSerializer -> send and receive data and relations in a single request
+    serializers: {
+      application: ActiveModelSerializer,
+    },
+
     models: {
       user: Model.extend<Partial<User>>({})
       //partial allow us to add users with incomplete data if needed
@@ -32,14 +37,32 @@ export function makeServer() {
     },
 
     seeds(server) {
-      server.createList('user', 15);
+      server.createList('user', 200);
     },
 
     routes() {
       this.namespace = 'api';
       this.timing = 750;
 
-      this.get('/users');
+      this.get('/users', function (schema, request) {
+        const { page = 1, per_page = 10} = request.queryParams;
+
+        const total = schema.all('user').length
+
+        const pageStart = (Number(page) - 1) * Number(per_page);
+        const pageEnd = pageStart + Number(per_page);
+
+        const users = this.serialize(schema.all('user'))
+         .users
+         .slice(pageStart, pageEnd);
+
+        return new Response(
+          200,
+          { 'x-total-count': String(total)},
+          { users }
+        )
+      });
+      this.get('/users/:id');
       this.post('/users');
 
       //allow us to use /api without causing problems to next api routes
